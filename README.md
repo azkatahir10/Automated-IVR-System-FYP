@@ -11,7 +11,7 @@ This project is a fully automated IVR (Interactive Voice Response) system that h
 - Kainat Umer (bscs22028)
 - Aliha Tariq (bscs22146)
 
-Supervisor: Dr. Ali Humayun
+Supervisor: Dr. Mudassir Shabbir
 
 ---
 
