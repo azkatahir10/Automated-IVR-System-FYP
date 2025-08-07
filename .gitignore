@@ -1,0 +1,17 @@
+# Ignore local environment, build, and temp folders
+venv/
+tmp/
+.env
+
+# Ignore model folders
+whisper.cpp/
+orpheous-tts-local/
+asterisk/
+
+# Ignore audio files
+caller_audio.wav
+output.wav
+
+# Ignore any OS-generated files
+.DS_Store
+Thumbs.db

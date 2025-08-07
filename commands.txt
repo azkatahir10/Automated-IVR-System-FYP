@@ -1,0 +1,11 @@
+sudo nano /etc/asterisk/extensions.conf
+source asterisk/bin/activate
+console dial 1000@ivr-demo - [to test demo call in asterisk's console]
+sudo asterisk -rx "dialplan reload"
+sudo asterisk -rvv
+core reload
+sudo systemctl restart asterisk - [for restarting from scratch]
+sudo nano /etc/asterisk/pjsip.conf
+sudo asterisk -rx "core stop now"
+arecord -r 8000 -c 1 -t wav -f S16_LE /home/asteriskvm/ivr-module/tmp/caller_audio.wav
+
