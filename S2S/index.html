@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+  <meta charset="UTF-8">
+  <title>Speech-to-Speech Urdu IVR</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+    button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+    #log { text-align: left; width: 80%; margin: 20px auto; border: 1px solid #ccc; padding: 10px; height: 200px; overflow-y: auto; }
+  </style>
+</head>
+<body>
+  <h2>اردو اسپیچ ٹو اسپیچ ڈیمو</h2>
+  <button id="start">شروع کریں</button>
+  <button id="stop" disabled>روکیں</button>
+  <div id="log"></div>
+
+  <script>
+    function log(msg) {
+      const logDiv = document.getElementById('log');
+      logDiv.innerHTML += `<div>${typeof msg === "object" ? JSON.stringify(msg) : msg}</div>`;
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    async function start() {
+      document.getElementById('start').disabled = true;
+      document.getElementById('stop').disabled = false;
+      log("🔄 Starting Urdu speech-to-speech...");
+
+      const pc = new RTCPeerConnection();
+      const dc = pc.createDataChannel("oai-events");
+      dc.onmessage = (e) => {
+        try { log(JSON.parse(e.data)); } catch { log(e.data); }
+      };
+
+      // Get microphone
+      const localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+
+      // Play remote audio
+      const audioEl = document.createElement("audio");
+      audioEl.autoplay = true;
+      pc.ontrack = (event) => { audioEl.srcObject = event.streams[0]; };
+
+      // Session setup (Urdu instructions)
+      dc.onopen = () => {
+        const sessionUpdate = {
+          type: 'session.update',
+          session: {
+            instructions: 'ہمیشہ خوش اخلاقی سے سلام کریں اور صرف اردو میں جواب دیں۔ مختصر جملوں میں بات کریں۔ اگر صارف پلاٹ خریدنے کا کہے تو جواب دیں: جی بالکل، میں مدد کرتا/کرتی ہوں — اور آگے سوال کریں (جگہ، بجٹ، وغیرہ)۔',
+            voice: 'alloy',
+            input_audio_transcription: { model: 'whisper-1', language: 'ur' },
+            output_audio_format: 'pcm16'
+          }
+        };
+        dc.send(JSON.stringify(sessionUpdate));
+
+        // Greeting
+        const greet = {
+          type: 'response.create',
+          response: { instructions: 'السلام علیکم! آپ کو کس علاقے میں پلاٹ چاہیے؟' }
+        };
+        dc.send(JSON.stringify(greet));
+      };
+
+      // --- Offer/Answer with your server ---
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      const sdpResp = await fetch("http://localhost:3000/session", { // server.js route
+        method: "POST",
+        headers: { "Content-Type": "application/sdp" },
+        body: offer.sdp
+      });
+
+      const answer = { type: "answer", sdp: await sdpResp.text() };
+      await pc.setRemoteDescription(answer);
+
+      log("✅ Connected. بولیں!");
+    }
+
+    async function stop() {
+      document.getElementById('start').disabled = false;
+      document.getElementById('stop').disabled = true;
+      log("⏹️ Stopped.");
+      // TODO: properly close peer connection
+    }
+
+    document.getElementById('start').onclick = start;
+    document.getElementById('stop').onclick = stop;
+  </script>
+</body>
+</html>
