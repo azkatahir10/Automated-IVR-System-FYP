@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+  <meta charset="UTF-8">
+  <title>Speech-to-Speech Urdu IVR</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin-top: 30px; }
+    button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+    #conversation, #log {
+      text-align: left; width: 80%; margin: 20px auto; border: 1px solid #ccc;
+      padding: 10px; height: 200px; overflow-y: auto;
+    }
+    #conversation { background: #f9f9f9; }
+    #log { background: #f1f1f1; font-size: 13px; color: #444; }
+    .user { color: darkblue; font-weight: bold; margin: 3px 0; }
+    .assistant { color: darkgreen; font-weight: bold; margin: 3px 0; }
+  </style>
+</head>
+<body>
+  <h2>اردو اسپیچ ٹو اسپیچ ڈیمو</h2>
+  <button id="start">شروع کریں</button>
+  <button id="stop" disabled>روکیں</button>
+
+  <h3>💬 گفتگو</h3>
+  <div id="conversation"></div>
+
+  <h3>🛠️ لاگ</h3>
+  <div id="log"></div>
+
+  <script>
+    function log(msg) {
+      const logDiv = document.getElementById('log');
+      logDiv.innerHTML += `<div>${typeof msg === "object" ? JSON.stringify(msg) : msg}</div>`;
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    function addConversation(role, text) {
+      if (!text) return;
+      const convDiv = document.getElementById('conversation');
+      convDiv.innerHTML += `<div class="${role}">${role === "user" ? "👤" : "🤖"} ${text}</div>`;
+      convDiv.scrollTop = convDiv.scrollHeight;
+    }
+
+    let pc, dc;
+
+    async function start() {
+      document.getElementById('start').disabled = true;
+      document.getElementById('stop').disabled = false;
+      log("🔄 Starting Urdu speech-to-speech...");
+
+      pc = new RTCPeerConnection();
+      dc = pc.createDataChannel("oai-events");
+
+      dc.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+
+          // --- Capture assistant transcript ---
+          if (data.type === "response.audio_transcript.done" && data.transcript) {
+            addConversation("assistant", data.transcript);
+          }
+
+          // --- Capture user transcript ---
+          if (data.type === "conversation.item.input_audio_transcription.completed" && data.transcript) {
+            addConversation("user", data.transcript);
+          }
+
+          // --- Other events go to logs ---
+          if (
+            data.type !== "response.audio_transcript.done" &&
+            data.type !== "conversation.item.input_audio_transcription.completed"
+          ) {
+            log(data);
+          }
+        } catch {
+          log(e.data);
+        }
+      };
+
+      // Get mic
+      const localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+
+      // Play AI voice
+      const audioEl = document.createElement("audio");
+      audioEl.autoplay = true;
+      pc.ontrack = (event) => { audioEl.srcObject = event.streams[0]; };
+
+      // Session setup
+      dc.onopen = () => {
+        const sessionUpdate = {
+          type: 'session.update',
+          session: {
+            instructions: `
+                آپ ایک دوستانہ اور قدرتی سیلز ایجنٹ ہیں جو رئیل اسٹیٹ کمپنی کے لئے کام کر رہے ہیں۔
+                آپ کا لہجہ خوش اخلاق اور دوستانہ ہونا چاہیے، جیسے آپ کسی دوست سے بات کر رہے ہیں۔
+                ہمیشہ بات چیت کو نرم انداز میں شروع کریں، کبھی بھی بہت مشینی یا سخت نہ لگیں۔
+                چھوٹے اور قدرتی جملے استعمال کریں، جیسے عام گفتگو میں ہوتے ہیں۔
+                اگر صارف کچھ کہے، تو کبھی کبھی ہلکی سی تعریف کریں یا ہمدردی جتائیں (مثال: "جی بالکل، یہ اچھی سوچ ہے۔").
+                ضرورت پڑنے پر سوال دہرانے یا وضاحت مانگنے میں جھجک نہ کریں۔
+                جب پلاٹ کی معلومات پوچھیں، تو آہستہ آہستہ ایک ایک قدم بڑھائیں:
+                  - پہلے علاقے کے بارے میں پوچھیں
+                  - پھر بجٹ کے بارے میں
+                  - پھر سائز (مرلہ یا کنال) کے بارے میں
+                  - پھر اضافی سہولیات (سکول، پارک، مارکیٹ) کے بارے میں
+                آخر میں ایک دوستانہ انداز میں خلاصہ پیش کریں اور پوچھیں کہ کیا وہ مزید تفصیل یا وزٹ چاہتے ہیں۔
+                ہمیشہ صرف اردو میں جواب دیں۔
+                `
+,
+            voice: 'alloy',
+            input_audio_transcription: { model: 'whisper-1', language: 'ur' },
+            output_audio_format: 'pcm16',
+            turn_detection: {
+              type: "server_vad",
+              threshold: 0.5,
+              silence_duration_ms: 200,
+              create_response: true,   // ✅ Let server auto-generate
+              interrupt_response: true
+            }
+          }
+        };
+        dc.send(JSON.stringify(sessionUpdate));
+      };
+
+      // Offer/Answer with backend
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      const sdpResp = await fetch("http://localhost:3000/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/sdp" },
+        body: offer.sdp
+      });
+
+      const answer = { type: "answer", sdp: await sdpResp.text() };
+      await pc.setRemoteDescription(answer);
+
+      log("✅ Connected. بولیں!");
+    }
+
+    async function stop() {
+      document.getElementById('start').disabled = false;
+      document.getElementById('stop').disabled = true;
+      log("⏹️ Stopped.");
+      if (pc) {
+        pc.close();
+        pc = null;
+      }
+    }
+
+    document.getElementById('start').onclick = start;
+    document.getElementById('stop').onclick = stop;
+  </script>
+</body>
+</html>
