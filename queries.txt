@@ -1,0 +1,59 @@
+🏠 Real Estate — Example Queries
+🔍 Rent-related:
+
+3 bedroom flat for rent in Lahore
+
+furnished apartment available in Gulberg
+
+cheap flat for rent near Johar Town
+
+upper portion for rent in Model Town
+
+2 bed house with separate entrance for rent
+
+💸 Sale-related:
+
+
+corner plot available in Bahria Town
+
+buy 1 kanal villa in Islamabad
+
+newly constructed house for sale in Faisal Town
+
+commercial property for sale near Airport Road
+
+🏢 Specific Property Features:
+
+flat with car parking in Gulberg
+
+apartment with elevator access
+
+house with servant quarter and lawn
+
+studio apartment for bachelors
+
+fully furnished flat with AC
+
+🌍 Location-based Queries:
+
+properties available in Karachi
+
+rental homes in Islamabad
+
+apartments in DHA phase 5
+
+plots in Bahria Town Lahore
+
+houses near Punjab University
+
+💬 Open-ended / Natural Queries:
+
+I’m looking for a small flat for rent in Lahore
+
+show me houses available under 50,000 rent
+
+where can I find a furnished apartment in Gulberg?
+
+any commercial offices available for rent?
+
+need 2 bedroom apartment with parking and balcony
