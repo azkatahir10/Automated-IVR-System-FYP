@@ -3,14 +3,19 @@ import json, faiss, numpy as np, os, re
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 from deep_translator import GoogleTranslator
+from dotenv import load_dotenv
 
-client = OpenAI()
+# Load .env file
+load_dotenv()
+
+# Initialize OpenAI client with API key
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = Flask(__name__)
 
 FAISS_INDEX_FILE = "faiss.index"
 METADATA_FILE = "metadata.jsonl"
-TOP_K = 3
+TOP_K = 5
 
 print("Loading embedding model...")
 model = SentenceTransformer("all-MiniLM-L6-v2")
