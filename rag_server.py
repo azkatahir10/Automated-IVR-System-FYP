@@ -5,10 +5,10 @@ from openai import OpenAI
 from deep_translator import GoogleTranslator
 from dotenv import load_dotenv
 
-# Load .env file
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 load_dotenv()
 
-# Initialize OpenAI client with API key
+# OpenAI client
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = Flask(__name__)
@@ -17,22 +17,28 @@ FAISS_INDEX_FILE = "faiss.index"
 METADATA_FILE = "metadata.jsonl"
 TOP_K = 5
 
+# ----------------------------------------------
+# LOAD MODELS + DATA
+# ----------------------------------------------
 print("Loading embedding model...")
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
-print("Loading FAISS index and metadata...")
+print("Loading FAISS index + metadata...")
 index = faiss.read_index(FAISS_INDEX_FILE)
+
 metadata = []
 with open(METADATA_FILE, "r", encoding="utf-8") as f:
     for line in f:
         metadata.append(json.loads(line))
-print("RAG Urdu property service ready!\n")
+
+print("RAG Urdu Property Server Ready ✔️\n")
 
 
-# TRANSLATION HELPERS
-
+# ----------------------------------------------
+# HELPERS
+# ----------------------------------------------
 def translate_to_urdu(text):
-    """Translate English words to Urdu unless Urdu already present."""
+    """Translate English → Urdu only if not already Urdu."""
     try:
         if re.search(r"[\u0600-\u06FF]", text):
             return text
@@ -42,7 +48,7 @@ def translate_to_urdu(text):
 
 
 def preprocess_results(raw_docs):
-    """Translate all key/value pairs into Urdu."""
+    """Convert property dict into Urdu key/value readable lines."""
     translated_docs = []
     for doc in raw_docs:
         urdu_pairs = []
@@ -54,58 +60,100 @@ def preprocess_results(raw_docs):
     return translated_docs
 
 
-# AI RESPONSE GENERATION
-def generate_urdu_summary(raw_results, query):
+def is_goodbye(text):
+    """Detect end-of-call terms."""
+    endings = ["اللہ حافظ", "خدا حافظ", "bye", "thanks", "شکریہ"]
+    text = text.strip().replace("۔", "")
+    return any(e in text.lower() for e in endings)
+
+
+# ----------------------------------------------
+# LOCATION FILTERING (prevents mixed city results)
+# ----------------------------------------------
+def filter_by_location(metadata, index, important_words):
+    filtered_meta = []
+    filtered_embeddings = []
+
+    for i, item in enumerate(metadata):
+        text = json.dumps(item["data"], ensure_ascii=False)
+        if any(word.lower() in text.lower() for word in important_words):
+            filtered_meta.append(item["data"])
+            filtered_embeddings.append(index.reconstruct(i))
+
+    # If no match → return everything
+    if len(filtered_embeddings) == 0:
+        return metadata, index
+
+    filtered_index = faiss.IndexFlatL2(len(filtered_embeddings[0]))
+    filtered_index.add(np.array(filtered_embeddings))
+
+    return filtered_meta, filtered_index
+
+
+# ----------------------------------------------
+# AI SUMMARY GENERATION (URDU NATURAL AGENT)
+# ----------------------------------------------
+def generate_urdu_summary(raw_results, query, history):
     try:
         joined_text = "\n".join(raw_results)
 
         prompt = f"""
-        آپ ایک نہایت دوستانہ، تجربہ کار اور پروفیشنل رئیل اسٹیٹ سیلز ایجنٹ ہیں۔
-        آپ کا انداز ہمیشہ:
-        - مؤدبانہ
-        - انسان جیسا
-        - مکمل وضاحت کے ساتھ
-        - گاہک کو سمجھانے والا
-        ہونا چاہیے۔
+آپ ایک انتہائی دوستانہ، تجربہ کار اور قدرتی لہجے میں بات کرنے والے رئیل اسٹیٹ سیلز ایجنٹ ہیں۔
 
-        گاہک نے جو بھی سوال پوچھا ہے، اس کا جواب *بالکل اسی کے مطابق* دیں۔
-         اگر گاہک نے جگہ، قیمت یا سائز پوچھا ہو تو کہیں:
-        "کچھ دیر ٹھہریں، میں چیک کر کے بتاتا ہوں…"
+آپ ہمیشہ:
+- نرم، خوش اخلاق، conversational لہجے میں بات کرتے ہیں
+- کوئی روبوٹک جملہ، کوئی سخت لائن نہیں بولتے
+- صرف ایک جامع، فلو میں بہتا ہوا انسانی جواب دیتے ہیں
 
-        📌 اگر گاہک نے **کسی ایک مخصوص گھر/پلاٹ کی تفصیل** پوچھی ہو، تو RAG سے ملی تمام معلومات کو خوبصورت، کہانی جیسے انداز میں مکمل طور پر بیان کریں۔
+------------------------------------------------------------------
+پچھلی گفتگو:
+{history}
 
-        نیچے دی گئی RAG معلومات سے یہ تفصیل نکال کر سمجھائیں:
-        - رقبہ (Area)
-        - قیمت (Price)
-        - بیڈ رومز
-        - باتھ رومز
-        - منزلیں
-        - کار پورچ / گیراج
-        - نقشہ / Facing
-        - لوکیشن
-        - اور کوئی بھی Extra معلومات
+گاہک کا سوال:
+{query}
 
-        ⚠ اگر کوئی فیلڈ موجود نہیں ہے تو اس کا نام نہ لیں۔
+RAG سے نکلا ہوا پراپرٹی ڈیٹا:
+{joined_text}
+------------------------------------------------------------------
 
-        آخر میں لازمی کہیں:
-        “اگر آپ چاہیں تو میں اس گھر کا وزٹ بھی شیڈول کر سکتا ہوں۔ کیا آپ کل شام 5 بجے دیکھنا پسند کریں گے؟”
+آپ نے ایسا کرنا ہے:
 
-        ----------------------------------
-        گاہک کا سوال:
-        {query}
+1️⃣ سب سے پہلے ایک human-style waiting لائن کہیں:
+- "ایک لمحہ دیں، میں چیک کرتا ہوں…"
+- "ذرا رکیں، میں دیکھ کر بتاتا ہوں…"
+- "کچھ دیر ٹھہریں، میں دیکھ لیتا ہوں…"
+(ہر بار مختلف لائن ہو)
 
-        RAG سے ملی ہوئی معلومات:
-        {joined_text}
-        ----------------------------------
+2️⃣ پھر RAG کی معلومات کو خوبصورت انسانی جملوں میں بیان کریں:
+- رقبہ ہو → "یہ جگہ تقریباً ___ مرلے/کنال کے آس پاس ہے"
+- بیڈ روم → "اس میں ___ بیڈ روم ہیں"
+- باتھ روم → "اس میں ___ باتھ روم ہیں"
+- قیمت → "قیمت تقریباً ___ کے آس پاس ہے"
+- لوکیشن/مارکیٹ/پارکنگ → نارمل انداز میں بتائیں
 
-        اب ایک مکمل قدرتی، دوستانہ، انسانی انداز میں جواب لکھیں۔
-        """
+❗ اگر کوئی فیلڈ نہیں ہے تو اسے بالکل مت ذکر کریں۔
+
+3️⃣ اس جواب میں:
+- کوئی وزٹ آفر نہیں
+- کوئی بکنگ نہیں
+- کوئی نام یا نمبر نہیں مانگنا
+- کوئی کال ٹو ایکشن نہیں
+
+4️⃣ آخر میں صرف ایک soft friendly closing لائن:
+- "اگر آپ چاہیں تو میں مزید options بھی چیک کر سکتا ہوں۔"
+یا
+- "مزید detail چاہیے ہو تو بتا دیں۔"
+
+❗ انتہائی اہم:
+ایک ہی جواب دیں۔
+کوئی ڈپلیکیٹ، کوئی دو جواب، کوئی repeat لائن نہیں۔
+
+اب ان ہدایات کے مطابق ایک ہی خوبصورت، مکمل اور انسانی انداز میں جواب لکھیں۔
+"""
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
+            messages=[{"role": "user", "content": prompt}],
             temperature=0.7
         )
 
@@ -113,33 +161,58 @@ def generate_urdu_summary(raw_results, query):
 
     except Exception as e:
         print("⚠️ Urdu summary error:", e)
-        return "معاف کیجئے گا، میں فی الحال مکمل تفصیل حاصل نہیں کر سکا۔"
+        return "معاف کیجئے، میں اس وقت مکمل معلومات حاصل نہیں کر سکا۔"
 
 
-#  SEARCH ENDPOINT
+# ----------------------------------------------
+# MAIN SEARCH ROUTE
+# ----------------------------------------------
 @app.route("/search", methods=["POST"])
 def search():
     data = request.get_json()
+
     query = data.get("query", "").strip()
+    history = data.get("history", "")
+
     if not query:
         return jsonify({"error": "No query provided"}), 400
 
+    # Goodbye detection
+    if is_goodbye(query):
+        return jsonify({
+            "results": [],
+            "summary": "ٹھیک ہے، اللہ حافظ! اپنا خیال رکھیں۔"
+        })
+
+    # Location keywords (modify based on your data)
+    location_words = ["dha", "ڈی ایچ اے", "garden", "گارڈن", "phase", "فیز"]
+
+    # Filter metadata by location context
+    filtered_meta, filtered_index = filter_by_location(metadata, index, location_words)
+
+    # Encode user query
     query_emb = model.encode(query, convert_to_tensor=False).astype("float32")
     query_emb = np.expand_dims(query_emb, axis=0)
     faiss.normalize_L2(query_emb)
 
-    distances, indices = index.search(query_emb, TOP_K)
+    # Search
+    distances, indices = filtered_index.search(query_emb, TOP_K)
 
-    raw_docs = [metadata[idx]["data"] for idx in indices[0]]
-    urdu_ready_results = preprocess_results(raw_docs)
+    # Extract top documents
+    raw_docs = [filtered_meta[i] for i in indices[0]]
+    urdu_ready = preprocess_results(raw_docs)
 
-    urdu_summary = generate_urdu_summary(urdu_ready_results, query)
+    # Generate Urdu property summary
+    urdu_summary = generate_urdu_summary(urdu_ready, query, history)
 
     return jsonify({
-        "results": urdu_ready_results,
+        "results": urdu_ready,
         "summary": urdu_summary
     })
 
 
+# ----------------------------------------------
+# RUN SERVER
+# ----------------------------------------------
 if __name__ == "__main__":
     app.run(port=5001)
