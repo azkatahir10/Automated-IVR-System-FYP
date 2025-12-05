@@ -1,231 +1,99 @@
 <!DOCTYPE html>
-<html lang="ur">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Urdu Property Voice Assistant</title>
-  <style>
-    body { font-family: Arial, sans-serif; text-align: center; margin-top: 30px; direction: rtl; }
-    button { padding: 10px 20px; margin: 10px; font-size: 16px; }
-    #conversation, #log {
-      text-align: right; width: 80%; margin: 20px auto; border: 1px solid #d13535;
-      padding: 10px; height: 200px; overflow-y: auto; border-radius: 8px;
-    }
-    #conversation { background: #f9d7d7;}
-    #log { background: #f9d7d7; font-size: 13px; color: #444; }
-    .user { color: #003399; font-weight: bold; margin: 3px 0; }
-    .assistant { color: #006600; font-weight: bold; margin: 3px 0; }
-  </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>🎙️ Property Sales Agent</title>
+
+  <!-- Icons & Fonts -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+
+  <!-- Local stylesheet -->
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h2>🎙️ Property sales agent</h2>
-  <button id="start"> Start </button>
-  <button id="stop" disabled> Stop </button>
+  <div class="container">
+    <header>
+      <h1><i class="fas fa-microphone-alt"></i> Property Sales Agent</h1>
+      <p class="subtitle">AI-powered real estate assistant with voice conversation capabilities</p>
+    </header>
 
-  <h3>💬 Conversation</h3>
-  <div id="conversation"></div>
+    <div class="agent-info">
+      <div class="agent-avatar">
+        <i class="fas fa-user-tie"></i>
+      </div>
+      <div class="agent-details">
+        <h3>AI Real Estate Assistant</h3>
+        <p><i class="fas fa-language"></i> Supports Urdu & English | <i class="fas fa-headset"></i> Voice & Text Conversation | <i class="fas fa-home"></i> Property Expert</p>
+        <div class="connection-status">
+          <span class="status-indicator status-inactive" id="status-indicator"></span>
+          <span id="status-text">Disconnected</span>
+        </div>
+      </div>
+    </div>
 
-  <h3>🛠️ Logs </h3>
-  <div id="log"></div>
+    <div class="controls">
+      <button id="start" class="btn btn-primary">
+        <i class="fas fa-play-circle"></i> Start Conversation
+      </button>
+      <button id="stop" class="btn btn-secondary" disabled>
+        <i class="fas fa-stop-circle"></i> Stop Conversation
+      </button>
+    </div>
 
-  <script>
-    let pc, dc, audioEl, ragInterval;
+    <div class="panels">
+      <div class="panel">
+        <div class="panel-header">
+          <i class="fas fa-comments"></i>
+          <h3>Live Conversation</h3>
+        </div>
+        <div class="panel-content" id="conversation">
+          <div class="message assistant">
+            <div class="message-header">
+              <i class="fas fa-robot"></i> Assistant
+            </div>
+            <div class="message-text">
+              Hello! I'm your AI real estate assistant. I can help you find properties, check prices, and schedule visits. How can I assist you today?
+            </div>
+          </div>
+          <div class="message assistant">
+            <div class="message-header">
+              <i class="fas fa-robot"></i> Assistant
+            </div>
+            <div class="message-text urdu-text">
+              آپ کا استقبال ہے! میں آپ کی رئیل اسٹیٹ معاونت کے لیے حاضر ہوں۔ آپ کو پراپرٹی تلاش کرنے، قیمتیں چیک کرنے اور وزٹ شیڈول کرنے میں مدد کر سکتا ہوں۔ آج میں آپ کی کس طرح مدد کر سکتا ہوں؟
+            </div>
+          </div>
+        </div>
+      </div>
 
-    function log(msg) {
-      const logDiv = document.getElementById('log');
-      logDiv.innerHTML += `<div>${typeof msg === "object" ? JSON.stringify(msg) : msg}</div>`;
-      logDiv.scrollTop = logDiv.scrollHeight;
-      console.log(msg);
-    }
+      <div class="panel">
+        <div class="panel-header">
+          <i class="fas fa-clipboard-list"></i>
+          <h3>System Logs</h3>
+        </div>
+        <div class="panel-content" id="log">
+          <div class="log-entry">
+            <span class="log-timestamp" id="current-time"></span>
+            <span class="log-type log-type-info">INFO</span>
+            <span>System initialized. Ready to start conversation.</span>
+          </div>
+        </div>
+      </div>
+    </div>
 
-    function addConversation(role, text) {
-      if (!text) return;
-      const convDiv = document.getElementById('conversation');
-      convDiv.innerHTML += `<div class="${role}">${role === "user" ? "👤" : "🤖"} ${text}</div>`;
-      convDiv.scrollTop = convDiv.scrollHeight;
+    <footer>
+      <p>Property Sales Agent v1.0 | Real-time voice conversation with AI assistant | Built with WebRTC & OpenAI</p>
+    </footer>
+  </div>
 
-      log(` Saving conversation: ${role.toUpperCase()}: ${text}`);
-      fetch("/save-conversation", {
-        method: "POST",
-        headers: { "Content-Type": "text/plain" },
-        body: `${role.toUpperCase()}: ${text}`
-      }).catch(err => log("Save error: " + err));
-    }
-
-    async function start() {
-      document.getElementById('start').disabled = true;
-      document.getElementById('stop').disabled = false;
-      log(" شروع کیا جا رہا ہے....");
-
-      try {
-        const startResp = await fetch("/start-conversation", { method: "POST" });
-        log("/start-conversation response: " + startResp.status);
-      } catch(err) {
-        log(" Error starting conversation: " + err);
-      }
-
-      try {
-        pc = new RTCPeerConnection();
-        dc = pc.createDataChannel("oai-events");
-
-        dc.onopen = () => {
-          log(" DataChannel is open");
-          const sessionUpdate = {
-            type: 'session.update',
-            session: {
-            instructions: `آپ ایک دوستانہ اور تجربہ کار رئیل اسٹیٹ سیلز ایجنٹ ہیں۔
-
-            آپ کا انداز ہمیشہ:
-            - خوش اخلاق
-            - انسانوں جیسا
-            - فون پر بات کرنے جیسا
-            - سادہ اور آسان زبان والا ہونا چاہیے
-
-            جملے کبھی مصنوعی، کتابی یا روبوٹ جیسے نہ ہوں۔ ہمیشہ بالکل ویسے جواب دیں جیسے ایک حقیقی ایجنٹ گاہک سے بات کرتا ہے۔
-
-            -------------------------------------------
-            📌 گاہک کے سوال کو سمجھ کر جواب دیں
-            -------------------------------------------
-            جواب دینے سے پہلے ذہنی طور پر یہ دیکھیں کہ گاہک:
-            - علاقے کے بارے میں پوچھ رہا ہے؟
-            - قیمت کے بارے میں؟
-            - سائز/مرلہ/سائٹ کے بارے میں؟
-            - یا کسی خاص گھر/پلاٹ کی مکمل تفصیل چاہ رہا ہے؟
-
-            جواب اس کے مطابق بنائیں — عمومی نہیں۔
-
-            -------------------------------------------
-            📌 اگر وہ قیمت، رقبہ، یا علاقے کی معلومات مانگے:
-            -------------------------------------------
-            سب سے پہلے کہیں:
-            “کچھ دیر ٹھہریں، میں چیک کر کے ابھی بتاتا ہوں…”
-
-            پھر RAG سے ملنے والی تفصیل انسانی انداز میں سمجھائیں، جیسے:
-            “آپ کے سوال کے مطابق، اس علاقے میں 10 مرلے کے پلاٹ تقریباً 2 کروڑ کے قریب مل جاتے ہیں۔ یہ قیمت لوکیشن، مین روڈ کی نزدیکی، اور قبضہ کی صورتحال کے مطابق مختلف ہو سکتی ہے۔”
-
-            -------------------------------------------
-            📌 اگر وہ کسی **خاص گھر یا پلاٹ کی مکمل تفصیل** مانگے:
-            -------------------------------------------
-            RAG کے ملنے والے ڈیٹا کو صاف، سادہ اور قدرتی انداز میں بیان کریں، مثلاً:
-            “جی ضرور! اس گھر کی تفصیل یہ ہے: اس میں 3 بیڈ روم، 2 باتھ، 5 مرلہ رقبہ اور ڈبل گیٹ انٹری موجود ہے۔ قیمت تقریباً 1 کروڑ 85 لاکھ کے آس پاس ہے۔”
-
-            -------------------------------------------
-            📌 آخر میں لازمی گاہک کو وزٹ ٹائم آفر کریں:
-            -------------------------------------------
-            مثلاً:
-            یا اگر زیادہ عمومی ہو تو:
-            “اگر آپ وزٹ کرنا چاہیں تو میں آپ کے لیے کل دوپہر یا شام میں وقت رکھ سکتا ہوں۔ آپ کون سا وقت پسند کریں گی/کریں گے؟”
-
-            -------------------------------------------
-            📌 گفتگو کو ہمیشہ گاہک کے مطابق بنائیں۔
-            -------------------------------------------
-            - اگر وہ کنفیوژ ہو تو آسان زبان میں سمجھائیں۔  
-            - اگر وہ قیمت کم کروانا چاہے تو نرم انداز میں کہیں کہ میں چیک کر سکتا ہوں۔  
-            - کبھی بھی dry، technical یا robotic جواب نہ دیں۔
-
-              `,
-              voice: 'alloy',
-              input_audio_transcription: { model: 'whisper-1', language: 'ur' },
-              output_audio_format: 'pcm16',
-              turn_detection: {
-                type: "server_vad",
-                threshold: 0.5,
-                silence_duration_ms: 200,
-                create_response: true,
-                interrupt_response: true
-              }
-            }
-          };
-          log(" Sending session update to server...");
-          dc.send(JSON.stringify(sessionUpdate));
-        };
-
-        dc.onmessage = (e) => {
-          try {
-            const data = JSON.parse(e.data);
-            log("Received DataChannel message: " + JSON.stringify(data));
-            if (data.type === "response.audio_transcript.done" && data.transcript)
-              addConversation("assistant", data.transcript);
-            if (data.type === "conversation.item.input_audio_transcription.completed" && data.transcript)
-              addConversation("user", data.transcript);
-          } catch(err) {
-            log(" Error parsing DataChannel message: " + err + " | Raw: " + e.data);
-          }
-        };
-
-        const localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-        log("Microphone stream added");
-
-        audioEl = document.createElement("audio");
-        audioEl.autoplay = true;
-        pc.ontrack = (event) => { 
-          audioEl.srcObject = event.streams[0]; 
-          log(" Audio track received from server");
-        };
-
-        log(" Creating SDP offer...");
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        try {
-          const sdpResp = await fetch("/session", {
-            method: "POST",
-            headers: { "Content-Type": "application/sdp" },
-            body: offer.sdp
-          });
-          const answer = { type: "answer", sdp: await sdpResp.text() };
-          await pc.setRemoteDescription(answer);
-          log(" SDP exchange completed");
-        } catch(err) {
-          log(" SDP exchange error: " + err);
-        }
-
-        log(" کنکشن تیار ہے، آپ بات کر سکتی ہیں-");
-        startRAGPolling();
-
-      } catch(err) {
-        log(" Error during start(): " + err);
-      }
-    }
-
-    async function startRAGPolling() {
-      ragInterval = setInterval(async () => {
-        try {
-          const resp = await fetch("/rag-latest");
-          if (!resp.ok) {
-            log(" RAG fetch failed: " + resp.status);
-            return;
-          }
-          const data = await resp.json();
-          log("📡 RAG data received: " + JSON.stringify(data));
-          if (data.text) {
-            addConversation("assistant", data.text);
-            const synth = window.speechSynthesis;
-            const utter = new SpeechSynthesisUtterance(data.text);
-            utter.lang = "ur-PK";
-            utter.rate = 0.9;
-            utter.pitch = 1;
-            synth.speak(utter);
-          }
-        } catch(err) {
-          log(" Error fetching RAG data: " + err);
-        }
-      }, 5000);
-      log(" RAG polling started every 5s");
-    }
-
-    async function stop() {
-      document.getElementById('start').disabled = false;
-      document.getElementById('stop').disabled = true;
-      if (pc) pc.close();
-      if (ragInterval) clearInterval(ragInterval);
-      log(" گفتگو ختم ہو گئی۔");
-    }
-
-    document.getElementById('start').onclick = start;
-    document.getElementById('stop').onclick = stop;
-  </script>
+  <!-- Local script -->
+  <script src="app.js"></script>
 </body>
 </html>
+
+</html>
+
 
 
