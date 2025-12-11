@@ -1,0 +1,23 @@
+{
+  "name": "s2s",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "module": "^1.2.5",
+    "node": "^24.9.0",
+    "node-fetch": "^3.3.2",
+    "pg": "^8.16.3"
+  }
+}

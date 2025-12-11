@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Property Voice Agent</title>
+
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: "Noto Naskh Arabic", serif;
+      background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
+      color: #f5f5f5;
+      direction: rtl;
+      overflow-x: hidden;
+    }
+
+    h2 {
+      margin-top: 20px;
+      font-size: 28px;
+      color: #f1c40f;
+      text-align: center;
+      letter-spacing: 1px;
+    }
+
+    /* Container Card */
+    .container {
+      width: 90%;
+      max-width: 900px;
+      margin: 20px auto;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.7);
+    }
+
+    /* Buttons */
+    button {
+      padding: 12px 28px;
+      margin: 10px;
+      font-size: 17px;
+      font-weight: bold;
+      border-radius: 30px;
+      border: none;
+      cursor: pointer;
+      transition: 0.3s ease-in-out;
+      letter-spacing: 1px;
+    }
+
+    #start {
+      background: #f1c40f;
+      color: #000;
+    }
+
+    #start:hover {
+      background: #ffd950;
+    }
+
+    #stop {
+      background: #c0392b;
+      color: white;
+    }
+
+    #stop:disabled {
+      background: #555;
+      cursor: not-allowed;
+    }
+
+    /* Conversation Area */
+    #conversation, #log {
+      width: 95%;
+      margin: 15px auto;
+      padding: 15px;
+      height: 260px;
+      overflow-y: auto;
+      border-radius: 15px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.04);
+      backdrop-filter: blur(10px);
+    }
+
+    /* Bubbles */
+    .user, .assistant {
+      max-width: 85%;
+      padding: 10px 15px;
+      border-radius: 12px;
+      margin: 8px 0;
+      animation: fadeIn 0.4s ease-in-out;
+      line-height: 1.6;
+      font-size: 16px;
+    }
+
+    .user {
+      background: rgba(241, 196, 15, 0.2);
+      border: 1px solid #f1c40f55;
+      margin-right: auto;
+      color: #ffeaa7;
+    }
+
+    .assistant {
+      background: rgba(255, 255, 255, 0.09);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      margin-left: auto;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Listening Indicator */
+    #listeningIndicator {
+      margin: 5px auto;
+      text-align: center;
+      font-size: 16px;
+      color: #f1c40f;
+      display: none;
+    }
+
+    .pulse {
+      width: 10px;
+      height: 10px;
+      margin: auto;
+      border-radius: 50%;
+      background: #f1c40f;
+      animation: pulseAnim 1s infinite;
+    }
+
+    @keyframes pulseAnim {
+      0% { transform: scale(0.8); opacity: 0.7; }
+      50% { transform: scale(1.4); opacity: 1; }
+      100% { transform: scale(0.8); opacity: 0.7; }
+    }
+
+    /* VU Meter */
+    #vuMeter {
+      width: 60px;
+      height: 10px;
+      margin: 10px auto;
+      display: flex;
+      gap: 4px;
+      visibility: hidden;
+    }
+
+    .bar {
+      flex: 1;
+      background: #f1c40f;
+      opacity: 0.3;
+      border-radius: 5px;
+      transition: 0.1s linear;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h2>🤖 AI رئیل اسٹیٹ وائس ایجنٹ</h2>
+
+  <div class="container">
+
+    <!-- Controls -->
+    <div style="text-align: center;">
+      <button id="start">شروع کریں</button>
+      <button id="stop" disabled>روکیں</button>
+    </div>
+
+    <!-- Listening Indicator -->
+    <div id="listeningIndicator">
+      <div class="pulse"></div>
+      سن رہا ہوں...
+    </div>
+
+    <!-- VU Meter -->
+    <div id="vuMeter">
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+    </div>
+
+    <h3 style="color:#f1c40f; margin-top:15px;">گفتگو</h3>
+    <div id="conversation"></div>
+
+    <h3 style="color:#f1c40f; margin-top:15px;">سسٹم لاگز</h3>
+    <div id="log"></div>
+  </div>
+
+  <script>
+    /* ================= VU Meter / Listening Animation ================= */
+    function animateVUMeter(active) {
+      const meter = document.getElementById("vuMeter");
+      const bars = document.querySelectorAll(".bar");
+
+      if (active) {
+        meter.style.visibility = "visible";
+        const int = setInterval(() => {
+          bars.forEach(b => {
+            b.style.height = (5 + Math.random() * 15) + "px";
+            b.style.opacity = (0.3 + Math.random() * 0.7);
+          });
+        }, 120);
+
+        meter.dataset.interval = int;
+      } else {
+        meter.style.visibility = "hidden";
+        clearInterval(meter.dataset.interval);
+        bars.forEach(b => { b.style.height = "5px"; b.style.opacity = 0.3; });
+      }
+    }
+
+    function showListening(state) {
+      const el = document.getElementById("listeningIndicator");
+      el.style.display = state ? "block" : "none";
+      animateVUMeter(state);
+    }
+
+    /* =================== Recording / Mixed-audio logic =================== */
+    let pc, dc, audioEl, ragInterval;
+    let audioCtx, destination, micSource, aiSource, mediaRecorder;
+    let recordedChunks = [];
+    const END_PHRASES_REGEX = /\b(thanks|thank you|bye|goodbye|khuda hafiz|خدا حافظ|شکریہ|الوداع)\b/i;
+
+    function log(msg) {
+      const logDiv = document.getElementById('log');
+      logDiv.innerHTML += `<div>${typeof msg === "object" ? JSON.stringify(msg) : msg}</div>`;
+      logDiv.scrollTop = logDiv.scrollHeight;
+      console.log(msg);
+    }
+
+    function addConversation(role, text) {
+      if (!text) return;
+
+      const convDiv = document.getElementById('conversation');
+      convDiv.innerHTML += `<div class="${role}">${text}</div>`;
+      convDiv.scrollTop = convDiv.scrollHeight;
+
+      fetch("/save-conversation", {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: `${role.toUpperCase()}: ${text}`
+      })
+      .then(r => r.text())
+      .then(resp => {
+        log("Server: " + resp);
+        if (/ending/i.test(resp)) fetch("/end-conversation", { method: "POST", body: "auto-end" });
+      });
+
+      if (END_PHRASES_REGEX.test(text) && role === "user") {
+        fetch("/end-conversation", { method: "POST", body: "client-end" });
+      }
+    }
+
+    /* Create Mixed Stream recorder:
+       - localStream: user mic stream
+       - assistantStream: remote audio stream from pc.ontrack
+       We combine both into an AudioContext destination and record that.
+    */
+    async function startRecording(localStream) {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        destination = audioCtx.createMediaStreamDestination();
+
+        // mic source
+        micSource = audioCtx.createMediaStreamSource(localStream);
+        // connect mic to destination (and to audioCtx destination if you need monitoring)
+        micSource.connect(destination);
+
+        // if assistant audio already present, connect it as well (pc.ontrack will update aiSource)
+        // start recorder
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(destination.stream, { mimeType: 'audio/webm' });
+
+        mediaRecorder.ondataavailable = event => {
+          if (event.data && event.data.size > 0) recordedChunks.push(event.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+          // create blob and upload
+          const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+          try {
+            const arrayBuffer = await blob.arrayBuffer();
+            // send raw bytes to server
+            await fetch("/upload-audio", {
+              method: "POST",
+              headers: { "Content-Type": "application/octet-stream" },
+              body: arrayBuffer
+            }).then(r => r.json()).then(j => log("Audio upload response: " + JSON.stringify(j))).catch(e => log("Audio upload failed: " + e));
+          } catch (err) {
+            log("Audio upload error: " + err);
+          }
+        };
+
+        mediaRecorder.start();
+        log("MediaRecorder started for mixed stream.");
+      } catch (err) {
+        console.warn("startRecording error:", err);
+      }
+    }
+
+    function stopRecording() {
+      try {
+        if (mediaRecorder && mediaRecorder.state !== "inactive") {
+          mediaRecorder.stop();
+        }
+        if (micSource) { try { micSource.disconnect(); } catch(e){} micSource = null; }
+        if (aiSource) { try { aiSource.disconnect(); } catch(e){} aiSource = null; }
+        // keep destination for re-use if needed
+      } catch (err) {
+        console.warn("stopRecording error:", err);
+      }
+    }
+
+    async function start() {
+      document.getElementById('start').disabled = true;
+      document.getElementById('stop').disabled = false;
+      showListening(true);
+
+      log("شروع کیا جا رہا ہے....");
+
+      // start conversation on server (creates txt etc.)
+      await fetch("/start-conversation", { method: "POST" });
+
+      try {
+        pc = new RTCPeerConnection();
+        dc = pc.createDataChannel("oai-events");
+
+        dc.onopen = () => {
+          log("DataChannel open");
+          showListening(true);
+
+          dc.send(JSON.stringify({
+            type: 'session.update',
+            session: {
+              instructions: "آپ ایک دوستانہ اور تجربہ کار رئیل اسٹیٹ سیلز ایجنٹ ہیں۔",
+              voice: 'alloy',
+              input_audio_transcription: { model: 'whisper-1', language: 'ur' },
+              output_audio_format: 'pcm16'
+            }
+          }));
+        };
+
+        dc.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            log("DataChannel message: " + JSON.stringify(data));
+            if (data.type === "response.audio_transcript.done" && data.transcript)
+              addConversation("assistant", data.transcript);
+            if (data.type === "conversation.item.input_audio_transcription.completed" && data.transcript)
+              addConversation("user", data.transcript);
+          } catch (err) {
+            log("DataChannel parse error: " + err);
+          }
+        };
+
+        // get user mic stream
+        const localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // add mic tracks to peer connection
+        localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+
+        // start recording the mixed stream (mic + assistant)
+        await startRecording(localStream);
+
+        audioEl = document.createElement("audio");
+        audioEl.autoplay = true;
+        pc.ontrack = (event) => {
+          // when assistant audio track arrives, play and also connect it to audio context
+          audioEl.srcObject = event.streams[0];
+          try {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            // create source for assistant audio and connect to mixed destination
+            aiSource = audioCtx.createMediaStreamSource(event.streams[0]);
+            aiSource.connect(destination);
+          } catch (err) {
+            console.warn("Could not connect assistant audio to audioCtx:", err);
+          }
+        };
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        const sdpResp = await fetch("/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/sdp" },
+          body: offer.sdp
+        });
+
+        const answerSdp = await sdpResp.text();
+        await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+
+        // start RAG polling (unchanged)
+        startRAGPolling();
+      } catch (err) {
+        log("Error during start(): " + err);
+      }
+    }
+
+    function startRAGPolling() {
+      ragInterval = setInterval(async () => {
+        try {
+          const resp = await fetch("/rag-latest");
+          if (!resp.ok) return;
+          const data = await resp.json();
+          if (data.text) {
+            addConversation("assistant", data.text);
+            const synth = window.speechSynthesis;
+            const utter = new SpeechSynthesisUtterance(data.text);
+            utter.lang = "ur-PK"; utter.rate = 0.9; utter.pitch = 1;
+            synth.speak(utter);
+          }
+        } catch (err) {
+          log("Error fetching RAG data: " + err);
+        }
+      }, 5000);
+      log("RAG polling started every 5s");
+    }
+
+    async function stop() {
+      showListening(false);
+
+      document.getElementById('start').disabled = false;
+      document.getElementById('stop').disabled = true;
+
+      // stop recording first, which triggers upload on mediaRecorder.onstop
+      stopRecording();
+
+      // call end-conversation (this will finalize and insert single DB row including audio_buffer already set by /upload-audio route)
+      try {
+        // Wait a short bit to let recorder finish and upload (if it hasn't already)
+        // NOTE: we don't block indefinitely; onStop will upload, but to be safe we wait up to ~1s
+        await new Promise(r => setTimeout(r, 900));
+        const resp = await fetch("/end-conversation", { method: "POST", body: "manual-stop" });
+        const text = await resp.text();
+        log("End conversation response: " + text);
+      } catch (err) {
+        log("Error calling end-conversation: " + err);
+      }
+
+      if (pc) pc.close();
+      if (ragInterval) clearInterval(ragInterval);
+
+      log("گفتگو ختم ہوگئی۔");
+    }
+
+    document.getElementById('start').onclick = start;
+    document.getElementById('stop').onclick = stop;
+  </script>
+
+</body>
+</html>
