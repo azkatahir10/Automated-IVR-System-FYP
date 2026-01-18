@@ -1,13 +1,20 @@
 let pc, dc, audioEl, ragInterval;
 let aiAudioAttached = false;
 let currentConversationFile = null;
+
+let lastAssistantText = "";   // prevent duplicate assistant saves
+
 window.sessionUpdated = false;
 window.ragPollingStarted = false;
 
 // ------------------- Time update -------------------
 function updateTime() {
   const now = new Date();
-  const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const timeString = now.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
   document.getElementById('current-time').textContent = timeString;
 }
 setInterval(updateTime, 1000);
@@ -17,6 +24,7 @@ updateTime();
 function updateStatus(connected) {
   const indicator = document.getElementById('status-indicator');
   const statusText = document.getElementById('status-text');
+
   if (connected) {
     indicator.className = 'status-indicator status-active';
     statusText.textContent = 'Connected - Listening';
@@ -29,86 +37,91 @@ function updateStatus(connected) {
 // ------------------- Logging -------------------
 function log(msg, type = 'info') {
   const logDiv = document.getElementById('log');
-  const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const timestamp = new Date().toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+
   const logEntry = document.createElement('div');
   logEntry.className = 'log-entry';
-  const typeClass = type === 'error' ? 'log-type-error' : type === 'success' ? 'log-type-success' : 'log-type-info';
-  logEntry.innerHTML = `<span class="log-timestamp">${timestamp}</span>
-                        <span class="log-type ${typeClass}">${type.toUpperCase()}</span>
-                        <span>${typeof msg === "object" ? JSON.stringify(msg) : msg}</span>`;
+
+  const typeClass =
+    type === 'error' ? 'log-type-error'
+    : type === 'success' ? 'log-type-success'
+    : 'log-type-info';
+
+  logEntry.innerHTML = `
+    <span class="log-timestamp">${timestamp}</span>
+    <span class="log-type ${typeClass}">${type.toUpperCase()}</span>
+    <span>${typeof msg === "object" ? JSON.stringify(msg) : msg}</span>
+  `;
+
   if (logDiv.firstChild) logDiv.insertBefore(logEntry, logDiv.firstChild);
   else logDiv.appendChild(logEntry);
+
   console.log(msg);
 }
 
-// ------------------- Conversation handling -------------------
+// ------------------- Save FINAL conversation -------------------
 function addConversation(role, text) {
-  if (!text) return;
-
-  // Do NOT remove live AI messages
-  removeLiveUserMessage();
+  if (!text || !currentConversationFile) return;
 
   const convDiv = document.getElementById('conversation');
   const containsUrdu = /[\u0600-\u06FF]/.test(text);
   const textClass = containsUrdu ? 'message-text urdu-text' : 'message-text';
 
-  const messageDiv = document.createElement('div');
-  messageDiv.className = `message ${role}`;
-  messageDiv.innerHTML = `<div class="message-header">
-                            <i class="${role === "user" ? "fas fa-user" : "fas fa-robot"}"></i> ${role === "user" ? "You" : "Assistant"}
-                          </div>
-                          <div class="${textClass}">${text}</div>`;
-  convDiv.appendChild(messageDiv);
+  const msgDiv = document.createElement('div');
+  msgDiv.className = `message ${role}`;
+  msgDiv.innerHTML = `
+    <div class="message-header">
+      <i class="${role === 'user' ? 'fas fa-user' : 'fas fa-robot'}"></i>
+      ${role === 'user' ? 'You' : 'Assistant'}
+    </div>
+    <div class="${textClass}">${text}</div>
+  `;
+
+  convDiv.appendChild(msgDiv);
   convDiv.scrollTop = convDiv.scrollHeight;
 
-  log(`Saved conversation: ${role.toUpperCase()}: ${text}`, 'info');
-
-  // Send to backend for saving
-  if (currentConversationFile) {
-    fetch("/save-conversation", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role, text })
-    }).catch(err => log("Save error: " + err, 'error'));
-  }
+  fetch("/save-conversation", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role, text })
+  }).catch(err => log("Save error: " + err, 'error'));
 }
 
-// ------------------- Live preview helpers -------------------
+// ------------------- Live USER preview (UI only) -------------------
 function addLiveUserMessage(text) {
   let live = document.getElementById("liveUserMsg");
+
   if (!live) {
     live = document.createElement("div");
     live.id = "liveUserMsg";
     live.className = "message user";
-    live.innerHTML = `<div class="message-header"><i class="fas fa-user"></i> You</div><div class="message-text">${text}</div>`;
+    live.innerHTML = `
+      <div class="message-header"><i class="fas fa-user"></i> You</div>
+      <div class="message-text">${text}</div>
+    `;
     document.getElementById("conversation").appendChild(live);
-  } else live.querySelector(".message-text").textContent = text;
-  document.getElementById("conversation").scrollTop = document.getElementById("conversation").scrollHeight;
+  } else {
+    live.querySelector(".message-text").textContent = text;
+  }
+
+  document.getElementById("conversation").scrollTop =
+    document.getElementById("conversation").scrollHeight;
 }
+
 function removeLiveUserMessage() {
   const live = document.getElementById("liveUserMsg");
   if (live) live.remove();
-}
-function addLiveAIMessage(text) {
-  // Always append new AI messages (do not replace or remove)
-  const convDiv = document.getElementById('conversation');
-  const messageDiv = document.createElement("div");
-  messageDiv.className = "message assistant";
-  messageDiv.innerHTML = `<div class="message-header"><i class="fas fa-robot"></i> Assistant</div><div class="message-text">${text}</div>`;
-  convDiv.appendChild(messageDiv);
-  convDiv.scrollTop = convDiv.scrollHeight;
-
-  // Also save immediately
-  addConversation("assistant", text);
-}
-function removeLiveAIMessage() {
-  // Do nothing to preserve AI messages
 }
 
 // ------------------- Start conversation -------------------
 async function start() {
   document.getElementById('start').disabled = true;
   document.getElementById('stop').disabled = false;
+
   updateStatus(true);
   log("شروع کیا جا رہا ہے....", 'info');
 
@@ -116,8 +129,8 @@ async function start() {
     const resp = await fetch("/start-conversation", { method: "POST" });
     const data = await resp.json();
     currentConversationFile = data.file;
-    log("Conversation file: " + currentConversationFile, 'success');
-  } catch(err) {
+    log("Conversation file created", 'success');
+  } catch (err) {
     log("Error starting conversation: " + err, 'error');
     return;
   }
@@ -128,9 +141,10 @@ async function start() {
 
     dc.onopen = () => {
       log("DataChannel is open", 'success');
+
       if (!window.sessionUpdated) {
-        const sessionUpdate = {
-          type: 'session.update',
+        dc.send(JSON.stringify({
+          type: "session.update",
           session: {
             instructions: `آپ ایک دوستانہ اور تجربہ کار رئیل اسٹیٹ سیلز ایجنٹ ہیں۔
 
@@ -218,15 +232,18 @@ async function start() {
 
             - کبھی بھی لمبے پیراگراف نہ دیں۔  
             - گفتگو ہمیشہ warm, short, helpful اور human ہونی چاہیے۔
-              `, // keep your full Urdu instructions here
-            voice: 'alloy',
-            input_audio_transcription: { model: 'whisper-1', language: 'ur' },
-            output_audio_format: 'pcm16',
-            turn_detection: { type: "server_vad", threshold: 0.5, silence_duration_ms: 200, create_response: true, interrupt_response: true }
+              `, voice: "alloy",
+            input_audio_transcription: {
+              model: "whisper-1",
+              language: "ur"
+            },
+            turn_detection: {
+              type: "server_vad",
+              silence_duration_ms: 200,
+              create_response: true
+            }
           }
-        };
-        log("Sending session update to server...", 'info');
-        dc.send(JSON.stringify(sessionUpdate));
+        }));
         window.sessionUpdated = true;
       }
     };
@@ -234,85 +251,89 @@ async function start() {
     dc.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
-        if (data.type === "conversation.item.input_audio_transcription.completed" && data.transcript) {
-          addLiveUserMessage(data.transcript);
-          if (data.is_final) addConversation("user", data.transcript);
+
+        // 🟡 USER LIVE PREVIEW
+        if (
+          data.type === "conversation.item.input_audio_transcription.delta" &&
+          data.delta
+        ) {
+          addLiveUserMessage(data.delta);
         }
-        if (data.type === "response.audio_transcript.done" && data.transcript) {
-          addLiveAIMessage(data.transcript);
+
+        // ✅ USER FINAL (SAVE)
+        if (
+          data.type === "conversation.item.input_audio_transcription.completed" &&
+          data.transcript
+        ) {
+          removeLiveUserMessage();
+          addConversation("user", data.transcript);
         }
-        if (data.type === "response.output_text.done" && data.text) {
-          addConversation("assistant", data.text);
+
+        // ✅ ASSISTANT FINAL (SAVE FROM AUDIO TRANSCRIPT)
+        if (
+          data.type === "response.audio_transcript.done" &&
+          data.transcript
+        ) {
+          if (data.transcript !== lastAssistantText) {
+            lastAssistantText = data.transcript;
+            addConversation("assistant", data.transcript);
+          }
         }
-      } catch(err) {
-        log("Error parsing DataChannel message: " + err + " | Raw: " + e.data, 'error');
+
+      } catch (err) {
+        log("Parse error: " + err, 'error');
       }
     };
 
-    const localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-    log("Microphone stream added", 'success');
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(t => pc.addTrack(t, stream));
 
     audioEl = document.createElement("audio");
     audioEl.autoplay = true;
+
     pc.ontrack = (event) => {
       if (!aiAudioAttached) {
         audioEl.srcObject = event.streams[0];
         aiAudioAttached = true;
-        log("Audio track received from server", 'success');
       }
     };
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    const sdpResp = await fetch("/session", { method: "POST", headers: { "Content-Type": "application/sdp" }, body: offer.sdp });
-    const answer = { type: "answer", sdp: await sdpResp.text() };
-    await pc.setRemoteDescription(answer);
-    log("SDP exchange completed", 'success');
-    log("کنکشن تیار ہے، آپ بات کر سکتی ہیں-", 'success');
 
-    startRAGPolling();
-  } catch(err) {
-    log("Error during start(): " + err, 'error');
+    const sdpResp = await fetch("/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/sdp" },
+      body: offer.sdp
+    });
+
+    await pc.setRemoteDescription({
+      type: "answer",
+      sdp: await sdpResp.text()
+    });
+
+    log("کنکشن تیار ہے، آپ بات کر سکتی ہیں", 'success');
+
+  } catch (err) {
+    log("Start error: " + err, 'error');
     updateStatus(false);
-    document.getElementById('start').disabled = false;
-    document.getElementById('stop').disabled = true;
   }
 }
 
-// ------------------- RAG polling -------------------
-async function startRAGPolling() {
-  if (window.ragPollingStarted) return;
-  window.ragPollingStarted = true;
-
-  ragInterval = setInterval(async () => {
-    try {
-      const resp = await fetch("/rag-latest");
-      if (!resp.ok) return log("RAG fetch failed: " + resp.status, 'error');
-      const data = await resp.json();
-      if (data.text) addLiveAIMessage(data.text);
-    } catch(err) { log("Error fetching RAG data: " + err, 'error'); }
-  }, 5000);
-
-  log("RAG polling started every 5s", 'info');
-}
-
 // ------------------- Stop conversation -------------------
-async function stop() {
+function stop() {
+  if (pc) pc.close();
+  pc = null;
+
+  updateStatus(false);
+  window.sessionUpdated = false;
+  aiAudioAttached = false;
+  lastAssistantText = "";
+
   document.getElementById('start').disabled = false;
   document.getElementById('stop').disabled = true;
-  updateStatus(false);
-
-  if (pc) { pc.close(); pc = null; }
-  if (ragInterval) { clearInterval(ragInterval); ragInterval = null; }
-
-  aiAudioAttached = false;
-  window.sessionUpdated = false;
-  window.ragPollingStarted = false;
 
   removeLiveUserMessage();
-  // Do NOT remove AI messages
-
   log("گفتگو ختم ہو گئی۔", 'info');
 }
 
@@ -320,5 +341,5 @@ async function stop() {
 document.getElementById('start').onclick = start;
 document.getElementById('stop').onclick = stop;
 
-// Initial log
 log("System ready. Click 'Start Conversation' to begin.", 'success');
+
