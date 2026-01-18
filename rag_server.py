@@ -15,7 +15,7 @@ app = Flask(__name__)
 
 FAISS_INDEX_FILE = "faiss.index"
 METADATA_FILE = "metadata.jsonl"
-TOP_K = 5
+TOP_K = 3  # Changed to 3 for top 3 results
 
 # ----------------------------------------------
 # LOAD MODELS + DATA
@@ -67,6 +67,16 @@ def is_goodbye(text):
     return any(e in text.lower() for e in endings)
 
 
+def is_specific_query(query):
+    """Detect if user is asking for specific/detailed property listings."""
+    specific_keywords = [
+        "تفصیل", "details", "options", "آپشن", "دکھائیں", "show", 
+        "بتائیں", "tell", "کون سی", "which", "کتنی", "how many",
+        "list", "لسٹ", "سب", "all", "مزید", "more", "تین", "3", "three"
+    ]
+    return any(keyword in query.lower() for keyword in specific_keywords)
+
+
 # ----------------------------------------------
 # LOCATION FILTERING (prevents mixed city results)
 # ----------------------------------------------
@@ -93,11 +103,53 @@ def filter_by_location(metadata, index, important_words):
 # ----------------------------------------------
 # AI SUMMARY GENERATION (URDU NATURAL AGENT)
 # ----------------------------------------------
-def generate_urdu_summary(raw_results, query, history):
+def generate_urdu_summary(raw_results, query, history, is_specific=False):
     try:
         joined_text = "\n".join(raw_results)
 
-        prompt = f"""
+        if is_specific:
+            # Detailed listing prompt for specific queries
+            prompt = f"""
+آپ ایک دوستانہ رئیل اسٹیٹ سیلز ایجنٹ ہیں جو تفصیلی پراپرٹیز کی لسٹ فراہم کر رہے ہیں۔
+
+------------------------------------------------------------------
+پچھلی گفتگو:
+{history}
+
+گاہک کا سوال:
+{query}
+
+RAG سے نکلے ہوئے Top 3 پراپرٹیز:
+{joined_text}
+------------------------------------------------------------------
+
+آپ نے یہ کرنا ہے:
+
+1️⃣ پہلے ایک friendly opening:
+- "جی بالکل، میں آپ کو تین بہترین آپشن بتاتا ہوں..."
+- "ٹھیک ہے، میرے پاس آپ کے لیے تین اچھی پراپرٹیز ہیں..."
+
+2️⃣ پھر ہر پراپرٹی کو CLEARLY الگ کر کے بیان کریں:
+
+**پہلی پراپرٹی:**
+[تفصیلات - رقبہ، بیڈ روم، باتھ روم، قیمت، لوکیشن]
+
+**دوسری پراپرٹی:**
+[تفصیلات - رقبہ، بیڈ روم، باتھ روم، قیمت، لوکیشن]
+
+**تیسری پراپرٹی:**
+[تفصیلات - رقبہ، بیڈ روم، باتھ روم، قیمت، لوکیشن]
+
+3️⃣ آخر میں ایک soft closing:
+- "ان میں سے کوئی آپ کو پسند آیا؟"
+- "مزید تفصیل کے لیے بتائیں۔"
+
+❗ ہر پراپرٹی کو نمبر یا heading سے الگ کریں
+❗ صاف اور پڑھنے میں آسان format استعمال کریں
+"""
+        else:
+            # General summary prompt (original)
+            prompt = f"""
 آپ ایک انتہائی دوستانہ، تجربہ کار اور قدرتی لہجے میں بات کرنے والے رئیل اسٹیٹ سیلز ایجنٹ ہیں۔
 
 آپ ہمیشہ:
@@ -184,6 +236,9 @@ def search():
             "summary": "ٹھیک ہے، اللہ حافظ! اپنا خیال رکھیں۔"
         })
 
+    # Check if user wants specific details
+    wants_specific = is_specific_query(query)
+
     # Location keywords (modify based on your data)
     location_words = ["dha", "ڈی ایچ اے", "garden", "گارڈن", "phase", "فیز"]
 
@@ -195,19 +250,21 @@ def search():
     query_emb = np.expand_dims(query_emb, axis=0)
     faiss.normalize_L2(query_emb)
 
-    # Search
+    # Search for top 3
     distances, indices = filtered_index.search(query_emb, TOP_K)
 
     # Extract top documents
     raw_docs = [filtered_meta[i] for i in indices[0]]
     urdu_ready = preprocess_results(raw_docs)
 
-    # Generate Urdu property summary
-    urdu_summary = generate_urdu_summary(urdu_ready, query, history)
+    # Generate Urdu property summary (with ranking if specific)
+    urdu_summary = generate_urdu_summary(urdu_ready, query, history, is_specific=wants_specific)
 
     return jsonify({
         "results": urdu_ready,
-        "summary": urdu_summary
+        "summary": urdu_summary,
+        "is_specific": wants_specific,  # Flag to indicate response type
+        "count": len(urdu_ready)  # Number of results returned
     })
 
 
