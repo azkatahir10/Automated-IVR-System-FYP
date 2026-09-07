@@ -1,0 +1,23 @@
+{
+  "type": "module",
+  "name": "tts_groq_whisper",
+  "version": "1.0.0",
+  "main": "call_groq.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.108.2",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "form-data": "^4.0.5",
+    "groq-sdk": "^0.37.0",
+    "node": "^26.3.0",
+    "node-fetch": "^3.3.2",
+    "ws": "^8.19.0"
+  }
+}

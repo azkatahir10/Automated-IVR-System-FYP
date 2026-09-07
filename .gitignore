@@ -1,0 +1,21 @@
+# Environment / secrets
+.env
+.env.*
+
+# Node
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Generated / large files
+fyp.zip
+
+# Local databases / generated indexes
+*.db
+faiss.index
+metadata.jsonl
+faiss_ids.json
